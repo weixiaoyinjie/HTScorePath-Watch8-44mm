@@ -1,0 +1,89 @@
+name: Build Watch8 44mm Phone and Wear APKs
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Watch8_ScorePath_44mm_OneUpload.zip'
+      - '.github/workflows/build-apk.yml'
+      - 'app/**'
+      - 'wear/**'
+      - 'tests/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Gradle 8.10.2
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Unpack full source if ZIP was uploaded
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f Watch8_ScorePath_44mm_OneUpload.zip ]; then
+            unzip -oq Watch8_ScorePath_44mm_OneUpload.zip
+          fi
+          test -f app/src/main/java/com/htlive/monitor/Watch8CompanionPayload.java
+          test -f wear/src/main/java/com/htlive/watch44/WearAlertActivity.java
+          test -f wear/src/main/java/com/htlive/watch44/WearAlertListener.java
+      - name: Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDK_DIR="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          test -d "$SDK_DIR"
+          echo "ANDROID_HOME=$SDK_DIR" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK_DIR" >> "$GITHUB_ENV"
+          if [ ! -d "$SDK_DIR/platforms/android-35" ] || [ ! -d "$SDK_DIR/build-tools/35.0.0" ]; then
+            SDKMANAGER=$(find "$SDK_DIR/cmdline-tools" -type f -name sdkmanager | sort -Vr | head -n1)
+            test -n "$SDKMANAGER"
+            (yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" --licenses >/dev/null) || true
+            "$SDKMANAGER" --sdk_root="$SDK_DIR" --install 'platforms;android-35' 'build-tools;35.0.0'
+          fi
+      - name: Test existing algorithms and 44mm payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          for t in tests/*.test.js; do node "$t"; done
+          mkdir -p /tmp/ht-watch44-tests
+          javac -encoding UTF-8 -d /tmp/ht-watch44-tests \
+            tests/java/org/json/JSONObject.java tests/java/org/json/JSONArray.java \
+            app/src/main/java/com/htlive/monitor/AlertPolicy.java \
+            app/src/main/java/com/htlive/monitor/MainScoreRiskEngine.java \
+            app/src/main/java/com/htlive/monitor/ScoreGuardEngine.java \
+            app/src/main/java/com/htlive/monitor/Watch8NotificationFormatter.java \
+            app/src/main/java/com/htlive/monitor/Watch8CompanionPayload.java \
+            tests/java/com/htlive/monitor/AlertPolicyTest.java \
+            tests/java/com/htlive/monitor/MainScoreRiskEngineTest.java \
+            tests/java/com/htlive/monitor/ScoreGuardEngineTest.java \
+            tests/java/com/htlive/monitor/ScorePathTest.java \
+            tests/java/com/htlive/monitor/Watch8NotificationFormatterTest.java \
+            tests/java/com/htlive/monitor/Watch8CompanionPayloadTest.java
+          for c in AlertPolicyTest MainScoreRiskEngineTest ScoreGuardEngineTest ScorePathTest Watch8NotificationFormatterTest Watch8CompanionPayloadTest; do
+            java -cp /tmp/ht-watch44-tests "com.htlive.monitor.$c"
+          done
+      - name: Compile both APKs together with same debug signing identity
+        run: gradle :app:assembleDebug :wear:assembleDebug --no-daemon --stacktrace
+      - name: Upload phone APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HT-Watch8-44mm-PHONE-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Upload watch APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HT-Watch8-44mm-WEAR-APK
+          path: wear/build/outputs/apk/debug/wear-debug.apk
+          if-no-files-found: error
