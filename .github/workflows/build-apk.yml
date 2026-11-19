@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - 'Watch8_ScorePath_SYNC_v3_5_OneUpload.zip'
+      - 'Watch8_ScorePath_MultiMatch_FIX_v3_4_OneUpload.zip'
+      - 'Watch8_ScorePath_44mm_STARTUP_FIX_v3_3_OneUpload.zip'
+      - 'Watch8_ScorePath_44mm_REPAIRED_OneUpload.zip'
       - 'Watch8_ScorePath_44mm_OneUpload.zip'
       - '.github/workflows/build-apk.yml'
       - 'app/**'
@@ -31,12 +35,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f Watch8_ScorePath_44mm_OneUpload.zip ]; then
+          if [ -f Watch8_ScorePath_SYNC_v3_5_OneUpload.zip ]; then
+            unzip -oq Watch8_ScorePath_SYNC_v3_5_OneUpload.zip
+          elif [ -f Watch8_ScorePath_MultiMatch_FIX_v3_4_OneUpload.zip ]; then
+            unzip -oq Watch8_ScorePath_MultiMatch_FIX_v3_4_OneUpload.zip
+          elif [ -f Watch8_ScorePath_44mm_STARTUP_FIX_v3_3_OneUpload.zip ]; then
+            unzip -oq Watch8_ScorePath_44mm_STARTUP_FIX_v3_3_OneUpload.zip
+          elif [ -f Watch8_ScorePath_44mm_REPAIRED_OneUpload.zip ]; then
+            unzip -oq Watch8_ScorePath_44mm_REPAIRED_OneUpload.zip
+          elif [ -f Watch8_ScorePath_44mm_OneUpload.zip ]; then
             unzip -oq Watch8_ScorePath_44mm_OneUpload.zip
           fi
           test -f app/src/main/java/com/htlive/monitor/Watch8CompanionPayload.java
           test -f wear/src/main/java/com/htlive/watch44/WearAlertActivity.java
+          test -f wear/src/main/java/com/htlive/watch44/WatchHomeActivity.java
+          test -f wear/src/main/java/com/htlive/watch44/WearConnectionProbe.java
           test -f wear/src/main/java/com/htlive/watch44/WearAlertListener.java
+          test -f signing/watch8-development.jks
       - name: Android SDK 35
         shell: bash
         run: |
@@ -51,7 +66,7 @@ jobs:
             (yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" --licenses >/dev/null) || true
             "$SDKMANAGER" --sdk_root="$SDK_DIR" --install 'platforms;android-35' 'build-tools;35.0.0'
           fi
-      - name: Test existing algorithms and 44mm payload
+      - name: Test multi-match OCR, existing algorithms and 44mm payload
         shell: bash
         run: |
           set -euo pipefail
@@ -75,6 +90,20 @@ jobs:
           done
       - name: Compile both APKs together with same debug signing identity
         run: gradle :app:assembleDebug :wear:assembleDebug --no-daemon --stacktrace
+      - name: Verify watch launcher declaration in source
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q 'com.htlive.watch44.WatchHomeActivity' wear/src/main/AndroidManifest.xml
+          grep -q 'android.intent.category.LAUNCHER' wear/src/main/AndroidManifest.xml
+          grep -q 'android:icon="@drawable/ic_watch_score"' wear/src/main/AndroidManifest.xml
+          test -f wear/src/main/res/drawable/ic_watch_score.xml
+      - name: Verify both APKs exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s wear/build/outputs/apk/debug/wear-debug.apk
       - name: Upload phone APK
         uses: actions/upload-artifact@v4
         with:
