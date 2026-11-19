@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
+      - 'Watch8_ScorePath_SYNC_v3_5_1_BUILD_FIX_OneUpload.zip'
       - 'Watch8_ScorePath_SYNC_v3_5_OneUpload.zip'
       - 'Watch8_ScorePath_MultiMatch_FIX_v3_4_OneUpload.zip'
       - 'Watch8_ScorePath_44mm_STARTUP_FIX_v3_3_OneUpload.zip'
@@ -35,7 +36,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -f Watch8_ScorePath_SYNC_v3_5_OneUpload.zip ]; then
+          if [ -f Watch8_ScorePath_SYNC_v3_5_1_BUILD_FIX_OneUpload.zip ]; then
+            unzip -oq Watch8_ScorePath_SYNC_v3_5_1_BUILD_FIX_OneUpload.zip
+          elif [ -f Watch8_ScorePath_SYNC_v3_5_OneUpload.zip ]; then
             unzip -oq Watch8_ScorePath_SYNC_v3_5_OneUpload.zip
           elif [ -f Watch8_ScorePath_MultiMatch_FIX_v3_4_OneUpload.zip ]; then
             unzip -oq Watch8_ScorePath_MultiMatch_FIX_v3_4_OneUpload.zip
@@ -89,7 +92,20 @@ jobs:
             java -cp /tmp/ht-watch44-tests "com.htlive.monitor.$c"
           done
       - name: Compile both APKs together with same debug signing identity
-        run: gradle :app:assembleDebug :wear:assembleDebug --no-daemon --stacktrace
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle :app:assembleDebug :wear:assembleDebug --no-daemon --stacktrace --console=plain 2>&1 | tee gradle-build.log
+      - name: Show compile error summary when build fails
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f gradle-build.log ]; then
+            echo '--- Java and Gradle compiler failures ---'
+            grep -n -E 'error:|FAILURE:|What went wrong:|Execution failed|cannot find symbol|package .* does not exist' gradle-build.log | tail -70 || true
+            echo '--- Last 100 build lines ---'
+            tail -100 gradle-build.log
+          fi
       - name: Verify watch launcher declaration in source
         shell: bash
         run: |
